@@ -22,14 +22,13 @@ varying vec3 fNormal;
 varying vec2 fTexCoord;
 varying vec4 fPositionFromLight[5];
 
-void main ()
-{    
+void main () {    
     if (vDrawType == 0 || vDrawType == 1) {
         fPos = (modelMatrix * vPosition).xyz;
         fNormal = (normalMatrix * vNormal);
         fTexCoord = vTexCoord;
 
-        for (int i = 0; i < 1; i++) {
+        for (int i = 0; i < 5; i++) {
             fPositionFromLight[i] = lightProjectionMatrix[i] * lightMatrix[i] * modelMatrix * vPosition;
         }
 
@@ -82,6 +81,7 @@ uniform vec4 fAmbientMaterial, fDiffuseMaterial, fSpecularMaterial;
 uniform float fShininess;
 uniform vec4 fLightPosition[5];
 uniform vec4 fAmbientLight[5], fDiffuseLight[5], fSpecularLight[5];
+uniform float fLightBias[5];
 uniform vec3 fCameraPosition;
 
 vec4 pack (const float depth) {
@@ -99,7 +99,7 @@ float unpack (vec4 color) {
    return dot (color, bitShift);
 }
 
-float ShadowCalculation (vec4 fPositionFromLight, sampler2D shadowMap) {
+float ShadowCalculation (vec4 fPositionFromLight, sampler2D shadowMap, float bias) {
     /*
     vec3 shadowCoord = (fPositionFromLight.xyz/fPositionFromLight.w)/2.0 + 0.5;
     vec4 rgbaDepth = texture2D(shadowMap, shadowCoord.xy);
@@ -110,14 +110,13 @@ float ShadowCalculation (vec4 fPositionFromLight, sampler2D shadowMap) {
     vec3 shadowCoord = fPositionFromLight.xyz / fPositionFromLight.w;
     shadowCoord = shadowCoord * 0.5 + 0.5; 
 
-    float bias = 0.15;
     float visibility = 0.0;
 
     vec2 poissonDisk[4];
-    poissonDisk[0] = vec2 (-0.94201624, -0.39906216);
-    poissonDisk[1] = vec2 (0.94558609, -0.76890725);
-    poissonDisk[2] = vec2 (-0.094184101, -0.92938870);
-    poissonDisk[3] = vec2 (0.34495938, 0.29387760);
+    poissonDisk[0] = vec2( -0.94201624, -0.39906216 );
+    poissonDisk[1] = vec2( 0.94558609, -0.76890725 );
+    poissonDisk[2] = vec2( -0.094184101, -0.92938870 );
+    poissonDisk[3] = vec2( 0.34495938, 0.29387760 );
 
     for (int i = 0; i < 4; i++) {
         vec4 rgbaDepth = texture2D(shadowMap, shadowCoord.xy + poissonDisk[i]/700.0);
@@ -127,7 +126,7 @@ float ShadowCalculation (vec4 fPositionFromLight, sampler2D shadowMap) {
         }
     }
 
-    if(shadowCoord.z > 1.0)
+    if (shadowCoord.z > 1.0)
         visibility = 0.0;
 
     return visibility;  
@@ -137,7 +136,7 @@ void main () {
     if (fDrawType == 0) {
         vec4 fColor = vec4 (0.0, 0.0, 0.0, 1.0);
 
-        for (int i = 0; i < 1; i++) {
+        for (int i = 0; i < 5; i++) {
             vec3 L;
             if (fLightPosition[i].w == 0.0) 
                 L = normalize (fLightPosition[i].xyz);
@@ -164,12 +163,13 @@ void main () {
             if (dot (L, N) < 0.0)
                 specular = vec4 (0.0, 0.0, 0.0, 1.0);
 
-            float shadow = ShadowCalculation (fPositionFromLight[i], shadowMap[i]);
+            float shadow = ShadowCalculation (fPositionFromLight[i], shadowMap[i], fLightBias[i]);
             vec4 fLighting = (ambient + (shadow) * (diffuse + specular));
             fColor = fColor + fLighting;
         }
  
         gl_FragColor = fColor * texture2D (texture, fTexCoord);
+        gl_FragColor.a = fAmbientMaterial.a;
         return;
 
     } else if (fDrawType == 1) {
@@ -205,15 +205,13 @@ void main () {
 <script type="text/javascript" src="perlinNoise.js"></script>
 <script type="text/javascript" src="StateManager.js"></script>
 <script type="text/javascript" src="auxillary.js"></script>
+<script type="text/javascript" src="physicsDemoScene.js"></script>
+<script type="text/javascript" src="project1Scene.js"></script>
+<script type="text/javascript" src="survivalScene.js"></script>
+<script type="text/javascript" src="eggertRoomScene.js"></script>
 
-
-<audio id="AUDIOWOOHOO" src="Audio/woohoo.wav"></audio>
-<audio id="AUDIOBRIBED" src="Audio/bribed.wav"></audio>
-<audio id="AUDIOFOUNDOIL" src="Audio/foundoil.wav"></audio>
-<audio id="AUDIODIE" src="Audio/die.wav"></audio>
-<audio id="AUDIOGIVEUP" src="Audio/giveup.wav"></audio>
-<audio id="AUDIOSONAR" src="Audio/sonar.wav"></audio>
 <img id = "TEXfrance" src="France.png" hidden></img>
+<img id = "whiteTEX"  src="white.jpg" hidden></img>
 
 <iframe id="deskOBJ" src="Meshes/desk.txt" style="display: none;"></iframe>
 <iframe id="deskMAT" src="Meshes/desk_material.txt" style="display: none;"></iframe>
@@ -246,20 +244,108 @@ void main () {
 <iframe id="buttonOBJ" src="Meshes/button.txt" style="display: none;"></iframe>
 <iframe id="buttonMAT" src="Meshes/button_material.txt" style="display: none;"></iframe>
 <img id=   "buttonTEX" src="Meshes/button_texture.png" hidden></img>
+<img id=   "buttonstartTEX" src="Meshes/button_texture_start.png" hidden></img>
+<img id=   "buttonclickmeTEX" src="Meshes/button_texture_clickme.png" hidden></img>
+<img id=   "buttondontclickmeTEX" src="Meshes/button_texture_dontclickme.png" hidden></img>
+<img id=   "buttongreenTEX" src="Meshes/button_texture_green.png" hidden></img>
+<img id=   "buttonpanicTEX" src="Meshes/button_texture_panic.png" hidden></img>
 
 <iframe id="buttonMountOBJ" src="Meshes/button_mount.txt" style="display: none;"></iframe>
 <iframe id="buttonMountMAT" src="Meshes/button_mount_material.txt" style="display: none;"></iframe>
 <img id=   "buttonMountTEX" src="Meshes/button_mount_texture.png" hidden></img>
 
+<iframe id="pictureOBJ" src="Meshes/picture.txt" style="display: none;"></iframe>
+<iframe id="pictureMAT" src="Meshes/picture_material.txt" style="display: none;"></iframe>
+<img id=   "pictureTEX" src="Meshes/picture_texture.png" hidden></img>
+
 <iframe id="personOBJ" src="Meshes/person.txt" style="display: none;"></iframe>
 <iframe id="personMAT" src="Meshes/person_material.txt" style="display: none;"></iframe>
 <img id=   "personTEX" src="Meshes/person_texture.png" hidden></img>
 
+<iframe id="leftdoorOBJ" src="Meshes/leftdoor.txt" style="display: none;"></iframe>
+<iframe id="rightdoorOBJ" src="Meshes/rightdoor.txt" style="display: none;"></iframe>
+<iframe id="leftdoorMAT" src="Meshes/leftdoor_material.txt" style="display: none;"></iframe>
+<iframe id="rightdoorMAT" src="Meshes/rightdoor_material.txt" style="display: none;"></iframe>
+<img id=   "doorTEX" src="Meshes/door_texture.png" hidden></img>
 
+<iframe id="hallwayleftOBJ" src="Meshes/hallway_left.txt" style="display: none;"></iframe>
+<iframe id="hallwayleftMAT" src="Meshes/hallway_left_material.txt" style="display: none;"></iframe>
+<img id=   "hallwayleftTEX" src="Meshes/hallway_left_texture.png" hidden></img>
+
+<iframe id="hallwayrightOBJ" src="Meshes/hallway_right.txt" style="display: none;"></iframe>
+<iframe id="hallwayrightMAT" src="Meshes/hallway_right_material.txt" style="display: none;"></iframe>
+<img id=   "hallwayrightTEX" src="Meshes/hallway_right_texture.png" hidden></img>
+
+<iframe id="hallwaybotOBJ" src="Meshes/hallway_bot.txt" style="display: none;"></iframe>
+<iframe id="hallwaybotMAT" src="Meshes/hallway_bot_material.txt" style="display: none;"></iframe>
+<img id=   "hallwaybotTEX" src="Meshes/hallway_bot_texture.png" hidden></img>
+
+<iframe id="hallwaytopOBJ" src="Meshes/hallway_top.txt" style="display: none;"></iframe>
+<iframe id="hallwaytopMAT" src="Meshes/hallway_top_material.txt" style="display: none;"></iframe>
+<img id=   "hallwaytopTEX" src="Meshes/hallway_top_texture.png" hidden></img>
+
+<iframe id="projectorOBJ" src="Meshes/projector.txt" style="display: none;"></iframe>
+<iframe id="projectorMAT" src="Meshes/projector_material.txt" style="display: none;"></iframe>
+<img id=   "projectorTEX" src="Meshes/projector_texture.png" hidden></img>
+
+<iframe id="dangerDoorLeftOBJ" src="Meshes/dangerdoors_left.txt" style="display: none;"></iframe>
+<iframe id="dangerDoorLeftMAT" src="Meshes/dangerdoors_left_material.txt" style="display: none;"></iframe>
+<img id=   "dangerDoorLeftTEX" src="Meshes/dangerdoors_left_texture.png" hidden></img>
+
+<iframe id="dangerDoorRightOBJ" src="Meshes/dangerdoors_right.txt" style="display: none;"></iframe>
+<iframe id="dangerDoorRightMAT" src="Meshes/dangerdoors_right_material.txt" style="display: none;"></iframe>
+<img id=   "dangerDoorRightTEX" src="Meshes/dangerdoors_right_texture.png" hidden></img>
+
+<iframe id="broomClosetOBJ" src="Meshes/broom_closet.txt" style="display: none;"></iframe>
+<iframe id="broomClosetMAT" src="Meshes/broom_closet_material.txt" style="display: none;"></iframe>
+<img id=   "broomClosetTEX" src="Meshes/broom_closet_texture.png" hidden></img>
+
+<iframe id="bazookaOBJ" src="Meshes/bazooka.txt" style="display: none;"></iframe>
+<iframe id="bazookaMAT" src="Meshes/bazooka_material.txt" style="display: none;"></iframe>
+<img id=   "bazookaTEX" src="Meshes/bazooka_texture.png" hidden></img>
+
+<audio id="A_bug1" src="Audio/bug1.mp3"></audio>
+<audio id="A_bug2" src="Audio/bug2.mp3"></audio>
+<audio id="A_bugstay1" src="Audio/bugstay1.mp3"></audio>
+<audio id="A_bugstay2" src="Audio/bugstay2.mp3"></audio>
+<audio id="A_intro1" src="Audio/intro1.mp3"></audio>
+<audio id="A_intro2" src="Audio/intro2.mp3"></audio>
+<audio id="A_intro3" src="Audio/intro3.mp3"></audio>
+<audio id="A_intro4" src="Audio/intro4.mp3"></audio>
+<audio id="A_intro5" src="Audio/intro5.mp3"></audio>
+<audio id="A_leaving1" src="Audio/leaving1.mp3"></audio>
+<audio id="A_leaving2" src="Audio/leaving2.mp3"></audio>
+<audio id="A_leaving3" src="Audio/leaving3.mp3"></audio>
+<audio id="A_leaving4" src="Audio/leaving4.mp3"></audio>
+<audio id="A_leaving5" src="Audio/leaving5.mp3"></audio>
+<audio id="A_leftbutton" src="Audio/leftbutton.mp3"></audio>
+<audio id="A_lookdown" src="Audio/lookdown.mp3"></audio>
+<audio id="A_physics" src="Audio/physics.mp3"></audio>
+<audio id="A_rightbutton1" src="Audio/rightbutton1.mp3"></audio>
+<audio id="A_rightbutton2" src="Audio/rightbutton2.mp3"></audio>
+<audio id="A_rightbutton3" src="Audio/rightbutton3.mp3"></audio>
+<audio id="A_rightbutton4" src="Audio/rightbutton4.mp3"></audio>
+<audio id="A_spawnchair" src="Audio/spawnchair.mp3"></audio>
+<audio id="A_broomcloset" src="Audio/broomcloset.mp3"></audio>
+<audio id="A_death" src="Audio/death.mp3"></audio>
+<audio id="A_eggertIntro" src="Audio/eggertIntro.mp3"></audio>
+<audio id="A_project1Intro" src="Audio/project1Intro.mp3"></audio>
+<audio id="A_testingIntro" src="Audio/testingIntro.mp3"></audio>
 
 <body>
+<div id = "loader">
+    <img src="loader.gif" alt = "loading">
+</div>
+
 <canvas id="gl-canvas" width="960" height="540">
 Oops ... your browser doesn't support the HTML5 canvas element
 </canvas>
+
+<table>
+<tr><td id='score'></td><td id='health'></td></tr>
+<tr><td id='loser'></td></tr>
+</table>
+
+
 </body>
 </html>

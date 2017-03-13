@@ -5,7 +5,6 @@ var DRAW_TYPE_COLOR = 1;
 var DRAW_TYPE_ORTHO = 2;
 var DRAW_TYPE_SHADOW = 3;
 
-
 /** object: an abstraction for a object. Objects contain a material, geometry,
  *  and transform object to define it. Objects can also be deactivated, causing
  *  their motion to still be upated, but they won't be drawn to the screen.
@@ -15,6 +14,9 @@ class object {
      *  @param { transform } transform: the orientation and position of the object.
      *  @param { material } material: the material that defines an object.
      *  @param { geometry } geometry: the object's geometry to define it.
+     *  @param { texture } texture: the object's texture if present.
+     *  @param { collider } collider: the object's collider.
+     *  @param { rigidBody } rigidBody: the object's rigidbody. 
      */
     constructor (_transform, _material, _geometry, _texture, _collider, _rigidBody) {
         this.transform = _transform || new transform ();
@@ -39,6 +41,10 @@ class object {
         this.active = true;
         this.tag = "default";
         this.children = [];
+
+        this.animations = [];
+
+        this.scene = null;
     }
 
     /** update: event loop function. Calls the update function for the transform component.
@@ -48,18 +54,24 @@ class object {
         if (this.rigidBody) {
             this.rigidBody.update (dTime);
         }
-        this.transform.update ();
-
+        
         if (this.camera) {
             this.camera.position = vec3.clone (this.transform.position);
             this.transform.rotation = quat.clone (this.camera.rotation);
         }
+
+        this.transform.update ();
+
     }
 
-    setup (_player) {
+    /** setup: sets up all the webgl attributes and uniforms for the object. 
+     */
+    setup () {
         if (this.material) {
             this.material.setup ();
-        } if (this.texture) {
+        } 
+
+        if (this.texture) {
             this.texture.setup (); 
         } 
 
@@ -74,8 +86,6 @@ class object {
             gl.uniformMatrix4fv (modelMatrixLoc, false, this.collider.matrix);
             gl.uniformMatrix4fv (cameraMatrixLoc, false, currentScene.playerController.player.camera.view);
             gl.uniformMatrix4fv (projectionMatrixLoc, false, currentScene.playerController.player.camera.perspectiveProjectionMatrix); 
-            //gl.uniformMatrix4fv (cameraMatrixLoc, false, currentScene.lightsManager.lightSources[0].view);
-            //gl.uniformMatrix4fv (projectionMatrixLoc, false, currentScene.lightsManager.lightSources[0].projectionMatrix); 
 
             var CTMN = mat3.create ();
             mat3.normalFromMat4 (CTMN, this.collider.matrix);
@@ -83,11 +93,30 @@ class object {
         }
     }
 
+    /** draw: draws the object to the screen if geometry is present
+     */
     draw () {
-        if (this.geometry) 
-            gl.drawArrays (this.drawType, 0, this.geometry.Nvertices);
+        if (this.geometry) {
+            if (this.material.ambient[3] != 1.0) {
+                gl.enable (gl.BLEND);
+                gl.blendFunc (gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+                gl.disable (gl.DEPTH_TEST);
+
+                gl.drawArrays (this.drawType, 0, this.geometry.Nvertices);
+
+                gl.disable(gl.BLEND);
+                gl.enable (gl.DEPTH_TEST);
+            } else {
+                gl.drawArrays (this.drawType, 0, this.geometry.Nvertices);
+            }
+        }
     }
 
+    /** loadFromObj: loads the object from an .obj, .mat, and texture image.
+     *  @param: { HTML ID } ObjID: the html ID for the .obj file.
+     *  @param: { HTML ID } MatID: the html ID for the .mat file.
+     *  @param: { HTML ID } TexID: the html ID for the texture image.
+     */
     loadFromObj (ObjID, MatID, TexID) {
         var ObjEle = document.getElementById(ObjID).contentWindow.document.body.textContent;
         if (!ObjEle) { 
@@ -199,19 +228,35 @@ class object {
     }
 
     addOnMouseClickTrigger (_function) {
-        this.mouseTriggers.push (new mouseTrigger (this, _function, "click"));
+        var x = new mouseTrigger (this, _function, "click");
+        this.mouseTriggers.push (x);
+        if (this.scene) {
+            this.scene.clickManager.addTrigger (x);
+        }
     }
 
     addOnMouseHoverTrigger (_function) {
-        this.mouseTriggers.push (new mouseTrigger (this, _function, "hover"));
+        var x = new mouseTrigger (this, _function, "hover");
+        this.mouseTriggers.push (x);
+        if (this.scene) {
+            this.scene.clickManager.addTrigger (x);
+        }
     }
 
     addOnMouseEnterTrigger (_function) {
-        this.mouseTriggers.push (new mouseTrigger (this, _function, "enter"));
+        var x = new mouseTrigger (this, _function, "enter");
+        this.mouseTriggers.push (x);
+        if (this.scene) {
+            this.scene.clickManager.addTrigger (x);
+        }
     }
 
     addOnMouseExitTrigger (_function) {
-        this.mouseTriggers.push (new mouseTrigger (this, _function, "exit"));
+        var x = new mouseTrigger (this, _function, "exit");
+        this.mouseTriggers.push (x);
+        if (this.scene) {
+            this.scene.clickManager.addTrigger (x);
+        }
     }
 
     clone () {
@@ -240,11 +285,13 @@ class object {
             case "box":
             {
                 newCollider = new boxCollider (this.collider.min, this.collider.max, this.collider.physics);
+                newCollider.collisionFunction = this.collider.collisionFunction;
                 break;
             }
             case "sphere":
             {
                 newCollider = new sphereCollider (this.collider.center, this.collider.radius, this.collider.physics);
+                newCollider.collisionFunction = this.collider.collisionFunction;
                 break;
             }
         }
@@ -263,7 +310,7 @@ class object {
 
         newObject.drawType = this.drawType;
         newObject.tag = this.tag;
-        newObject.active = this.active;
+        newObject.scene = this.scene;
 
         for (var i = 0; i < this.mouseTriggers.length; i++) {
             if (this.mouseTriggers[i].type == "click") {
@@ -275,6 +322,10 @@ class object {
             } else if (this.mouseTriggers[i].type == "exit") {
                 newObject.addOnMouseExitTrigger (this.mouseTriggers[i].func);
             } 
+        }
+
+        for (var i = 0; i < this.animations.length; i++) {
+            newObject.addAnimation (this.animations[i].clone ());
         }
 
         for (var i = 0; i < this.children.length; i++) {
@@ -306,8 +357,38 @@ class object {
                     mat3.invert (inv_I_body, I_body);
                     this.rigidBody.inv_Ibody = inv_I_body;
                 } else if (this.collider.type == "sphere") {
+                    var R = this.rigidBody.mass * this.collider.radius * this.collider.radius * (2 / 5);
 
+                    var I_body = mat3.fromValues (R,   0.0, 0.0, 
+                                                  0.0, R,   0.0,   
+                                                  0.0, 0.0, R   );
+
+                    this.rigidBody.Ibody = I_body;
+                    this.rigidBody.CoM = this.collider.center;
+
+                    var inv_I_body = mat3.create ();
+                    mat3.invert (inv_I_body, I_body);
+                    this.rigidBody.inv_Ibody = inv_I_body;
                 }
+            }
+        }
+    }
+
+    addAnimation (_animation) {
+        this.animations.push (_animation);
+        _animation.object = this;
+
+        if (this.scene) {
+            this.scene.animationsManager.addAnimation (_animation);
+        }
+    }
+
+    removeAnimation (_animation) {
+        for (var i =0 ;i < this.animations.length; i++) {
+            if (this.animations[i] == _animation) {
+                this.animations.splice (i, 1);
+                this.scene.animationsManager.removeAnimation (_animation);
+                return;
             }
         }
     }
@@ -318,24 +399,29 @@ class sceneGraph {
 	constructor (_build_function) {
 		this.root = new object ();
 		this.root.children = [];
-        this.lightsManager = new lightHandler ();
-        this.animationsManager = new animationHandler ();
-        this.collisionsManager = new sceneCollisionManager ();
+        this.lightsManager = new lightHandler (this);
+        this.animationsManager = new animationHandler (this);
+        this.collisionsManager = new sceneCollisionManager (this);
+        this.clickManager = new clickHandler (this);
 
         this.build_function = _build_function;
 
         this.playerController = null;
 
         this.root.tag = "root";
+        this.tag = "default";
 	}
 
 	drawTree (type) {
         var PC = mat4.create ();
         var PL = mat4.create ();
 
-        if (type == DRAW_TYPE_SHADOW) {
-            mat4.mul (PC, this.lightsManager.lightSources[0].projectionMatrix, this.lightsManager.lightSources[0].view);
-            mat4.mul (PL, this.lightsManager.lightSources[0].projectionMatrix, this.lightsManager.lightSources[0].view);
+        if (type >= DRAW_TYPE_SHADOW) {
+            if (!this.lightsManager.lightSources[type - DRAW_TYPE_SHADOW].shadows)
+                return;
+
+            mat4.mul (PC, this.lightsManager.lightSources[type - DRAW_TYPE_SHADOW].projectionMatrix, this.lightsManager.lightSources[type - DRAW_TYPE_SHADOW].view);
+            mat4.mul (PL, this.lightsManager.lightSources[type - DRAW_TYPE_SHADOW].projectionMatrix, this.lightsManager.lightSources[type - DRAW_TYPE_SHADOW].view);
         } else {
             mat4.mul (PC, this.playerController.player.camera.perspectiveProjectionMatrix, this.playerController.player.camera.view);
             mat4.mul (PL, this.lightsManager.lightSources[0].projectionMatrix, this.lightsManager.lightSources[0].view);
@@ -429,18 +515,37 @@ class sceneGraph {
     }
 
     __set_AUX (root, CTM, scaling) {
-        var CTM_prime = mat4.create ();
-        mat4.mul (CTM_prime, CTM, root.transform.matrix);
-        var scaling_prime = scaling * root.transform.scale[0];
-        root.collider.matrix = mat4.clone (CTM_prime);
-        if (root.collider.type == "sphere") {
-            root.collider.scaling = scaling_prime;
-        }
+        if (root.tag != "player") {
+            var CTM_prime = mat4.create ();
+            mat4.mul (CTM_prime, CTM, root.transform.matrix);
+            var scaling_prime = scaling * root.transform.scale[0];
+            root.collider.matrix = mat4.clone (CTM_prime);
+            if (root.collider.type == "sphere") {
+                root.collider.scaling = scaling_prime;
+            }
 
-        if (root.collider.type != "null") {
-            root.collider.setup ();
-            this.collisionsManager.objects.push (root);
-        }
+            if (root.collider.type != "null") {
+                root.collider.setup ();
+                this.collisionsManager.objects.push (root);
+            }
+        } else {
+            var CTM_prime = mat4.create ();
+            var transformMat = mat4.create ();
+            mat4.fromRotationTranslationScale (transformMat, quat.create (), root.transform.position, root.transform.scale);
+            mat4.mul (CTM_prime, CTM, transformMat);
+            var scaling_prime = scaling * root.transform.scale[0];
+            root.collider.matrix = mat4.clone (CTM_prime);
+            if (root.collider.type == "sphere") {
+                root.collider.scaling = scaling_prime;
+            }
+
+            if (root.collider.type != "null") {
+                root.collider.setup ();
+                this.collisionsManager.objects.push (root);
+            }
+            CTM_prime = mat4.create ();
+            mat4.mul (CTM_prime, CTM, root.transform.matrix);
+        }   
 
         for (var i = 0; i < root.children.length; i++) {
             this.__set_AUX (root.children[i], CTM_prime, scaling_prime);
@@ -464,6 +569,54 @@ class sceneGraph {
         }
     }
 
+    remove (object) {
+        for (var i = 0; i < this.root.children.length; i++) {
+            this.__remove_AUX (this.root, object);
+        }
+    }
+
+    __remove_AUX (root, object) {
+        for (var i = 0; i < root.children.length; i++) {
+            if (root.children[i] == object) {
+                for (var j = 0; j < root.children[i].animations.length; j++) {
+                    this.animationsManager.removeAnimation (root.children[i].animations[j]);
+                }
+
+                for (var j = 0; j < root.children[i].mouseTriggers.length; j++) {
+                    this.clickManager.removeTrigger (root.children[i].mouseTriggers[j]);
+                }
+                root.children.splice (i, 1);
+                i--;
+            } else {
+                this.__remove_AUX (root.children[i], object);
+            }
+        }
+    }
+
+    removeByTag (tag) {
+        for (var i = 0; i < this.root.children.length; i++) {
+            this.__removeByTag_AUX (this.root, tag);
+        }
+    }
+
+    __removeByTag_AUX (root, tag) {
+        for (var i = 0; i < root.children.length; i++) {
+            if (root.children[i].tag == tag) {
+                for (var j = 0; j < root.children[i].animations.length; j++) {
+                    this.animationsManager.removeAnimation (root.children[i].animations[j]);
+                }
+
+                for (var j = 0; j < root.children[i].mouseTriggers.length; j++) {
+                    this.clickManager.removeTrigger (root.children[i].mouseTriggers[j]);
+                }
+                root.children.splice (i, 1);
+                i--;
+            } else {
+                this.__removeByTag_AUX (root.children[i], tag);
+            }
+        }
+    }
+
     render (dTime) {
         this.animationsManager.animateAll (dTime);
         this.set ();
@@ -481,13 +634,12 @@ class sceneGraph {
             gl.uniform1i (gl.getUniformLocation (program, "fDrawType"), DRAW_TYPE_SHADOW + i);
 
             gl.bindFramebuffer (gl.FRAMEBUFFER, shadowFramebuffers[i]);
+            gl.enable (gl.DEPTH_TEST);
             gl.clear (gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-            gl.disable (gl.DEPTH_TEST);
 
-            this.drawTree (DRAW_TYPE_SHADOW);
+            this.drawTree (DRAW_TYPE_SHADOW + i);
         }
 
-        gl.enable (gl.DEPTH_TEST);
         gl.bindFramebuffer (gl.FRAMEBUFFER, null);
         gl.clear (gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
@@ -501,8 +653,8 @@ class sceneGraph {
 
         this.drawTree (DRAW_TYPE_COLOR);
 
-        gl.readPixels (canvas.width / 2, canvas.height / 2, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, clickManager.pixel);
-        clickManager.handleMouseEvents ();
+        gl.readPixels (canvas.width / 2, canvas.height / 2, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, this.clickManager.pixel);
+        this.clickManager.handleMouseEvents ();
 
         gl.enable (gl.DEPTH_TEST);
         gl.clear (gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -517,12 +669,7 @@ class sceneGraph {
             gl.uniform1i (gl.getUniformLocation (program, "shadowMap[" + i + "]"), 1 + i); 
         }
 
-        gl.enable (gl.BLEND);
-        gl.blendFunc (gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-
         this.drawTree (DRAW_TYPE_DEFAULT);
-
-        gl.disable(gl.BLEND);
         
         for (var i = 0; i < this.lightsManager.lightSources.length; i++) {
             gl.activeTexture (gl.TEXTURE1 + i);
@@ -538,16 +685,59 @@ class sceneGraph {
         this.playerController.player.camera.updateRotation (dTime);
         gl.uniform3fv (gl.getUniformLocation (program, "fCameraPosition"), this.playerController.player.camera.position);
 
-        if (this.playerController.movingforward) this.playerController.moveForward (dTime * 12);
-        if (this.playerController.movingbackward) this.playerController.moveBackward (dTime * 12);
-        if (this.playerController.movingleft) this.playerController.moveLeft (dTime * 12);
-        if (this.playerController.movingright) this.playerController.moveRight (dTime * 12);
-        if (this.playerController.movingup) this.playerController.jump ();
-        if (this.playerController.movingdown) this.playerController.moveDown (dTime * 12);
+        var rate = 12;
+        if (this.playerController.movingforward) this.playerController.moveForward (dTime * rate);
+        if (this.playerController.movingbackward) this.playerController.moveBackward (dTime * rate);
+        if (this.playerController.movingleft) this.playerController.moveLeft (dTime * rate);
+        if (this.playerController.movingright) this.playerController.moveRight (dTime * rate);
+        if (this.playerController.movingup) this.playerController.jump (dTime * rate);
+        if (this.playerController.movingdown) this.playerController.moveDown (dTime * rate);
     }
 
     build () {
         this.build_function (this);
+        var objs = this.getObjects ();
+        for (var i = 0; i < objs.length; i++) {
+            var currentObject = objs[i];
+            for (var j = 0; j < currentObject.mouseTriggers.length; j++) {
+                this.clickManager.addTrigger (currentObject.mouseTriggers[j]);
+            }
+
+            for (var j = 0; j < currentObject.animations.length; j++) {
+                this.animationsManager.addAnimation (currentObject.animations[j]);
+            }
+        }
+    }
+
+    push (object) {
+        this.root.children.push (object);
+
+        object.scene = this;
+        for (var i = 0; i < object.children.length; i++) {
+            this.__push_AUX (object.children[i]);
+        }
+    }
+
+    __push_AUX (object) {
+        object.scene = this;
+            
+        for (var i = 0; i < object.children.length; i++) {
+            this.__push_AUX (object.children[i]);
+        }
+    }
+
+    resetScene () {
+        this.root = new object ();
+        this.root.children = [];
+        this.lightsManager = new lightHandler (this);
+        this.animationsManager = new animationHandler (this);
+        this.collisionsManager = new sceneCollisionManager (this);
+        this.clickManager = new clickHandler (this);
+
+        this.playerController = null;
+        this.root.tag = "root";
+
+        this.build ();
     }
 }
 

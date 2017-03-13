@@ -4,8 +4,6 @@ class mouseTrigger {
         this.func = _function;
         this.object = _object;
         this.type = _type;
-
-        clickManager.addTrigger (this);
     }
 
     setup () {
@@ -16,12 +14,17 @@ class mouseTrigger {
 }
 
 class clickHandler {
-    constructor () {
-        this.clicked = false;
+    constructor (_scene) {
+        this.leftreleased = false;
+        this.rightreleased = false;
+        this.leftclicked = false;
+        this.rightclicked = false;
         this.pixel = new Uint8Array (4);
         this.triggers = [];
         this.hover = [];
         this.currentID = 1;
+
+        this.scene = _scene;
     }
 
     addTrigger (trigger) {
@@ -37,10 +40,26 @@ class clickHandler {
         this.triggers.push (trigger);
     }
 
+    removeTrigger (trigger) {
+        for (var i = 0; i < this.triggers.length; i++) {
+            if (this.triggers[i] == trigger) {
+                this.triggers.splice (i, 1);
+                i--;
+            }
+        }
+
+        for (var i = 0; i < this.hover.length; i++) {
+            if (this.hover[i] == trigger) {
+                this.hover.splice (i, 1);
+                i--;
+            }
+        }
+    }
+
     handleMouseEvents () {       
         for (var i = 0; i < this.triggers.length; i++) {
             if (vec4.equals(this.pixel, this.triggers[i].ID)) { 
-                if (this.triggers[i].type == "click" && this.clicked == true) {
+                if (this.triggers[i].type == "click" && this.leftclicked == true) {
                     this.triggers[i].func (this.triggers[i].object);
                 } else if (this.triggers[i].type == "hover") {
                     this.triggers[i].func (this.triggers[i].object);
@@ -70,7 +89,10 @@ class clickHandler {
                 }
             }
         } 
-        this.clicked = false;    
+        this.leftreleased = false;
+        this.rightreleased = false;  
+        this.leftclicked = false;    
+        this.rightclicked = false;
     }
 }
 
@@ -112,6 +134,7 @@ class boxCollider {
         this.currentCenter = vec3.create ();
 
         this.collisionFunction = null;
+        this.currentVertices = [];
     }
 
     setup () {
@@ -130,7 +153,7 @@ class boxCollider {
         var p_prime = [];
         for (var i = 0; i < this.vertices.length; i++) {
             var storage = vec4.create ();
-            p_prime.push (vec4.transformMat4 (storage, this.vertices[i], PC));
+            p_prime.push (vec4.transformMat4 (storage, this.currentVertices[i], PC));
         }
 
         var toDraw = false;
@@ -215,7 +238,7 @@ class sphereCollider {
         this.center = _center;
         this.radius = _radius;
         this.type = "sphere"
-        this.phyiscs = _physics;
+        this.physics = _physics;
 
         this.matrix = mat4.create ();
         this.scaling = 1.0;

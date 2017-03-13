@@ -31,6 +31,7 @@ StateManager.setState = function(state) {
 }
 
 StateManager.apply = function(eventName) {
+	if(currentEvent && currentEvent.name == eventName) return;
 	var event = currentState.getEvent(eventName);
 	if(!currentEvent) {
 		if(event && currentState.getChild(event.name)) {
@@ -58,6 +59,14 @@ StateManager.pause = function() {
 }
 StateManager.play = function() {
 	if(currentEvent) currentEvent.play();
+}
+
+StateManager.stopAll = function() {
+	if(currentEvent) {
+		currentEvent.pause();
+		currentEvent = null;
+	}
+	eventQueue = [];
 }
 
 StateManager.finishedEvent = function() {
@@ -108,20 +117,22 @@ class Event {
 
 class Activity {
 	constructor(_audio, _initfunc, _endfunc) {
-		this.audio = _audio;
+		this.audio = document.getElementById(_audio);
 		this.initfunc = _initfunc;
 		this.endfunc = function() {
-				_endfunc();
+				if(_endfunc) _endfunc();
 				StateManager.finishedEvent();
 			}
 		if(this.audio) this.audio.addEventListener("ended", this.endfunc);
 	}
 
 	run() {
-		if(this.audio) this.audio.currentTime = 0;
-		this.initfunc();
-		if(this.audio) this.audio.play();
-		else this.endfunc();
+		if (this.audio) {
+			this.audio.currentTime = 0; 
+			this.audio.play();
+		}
+		if (this.initfunc) this.initfunc();
+		if (!this.audio) this.endfunc();
 	}
 
 	stop() {

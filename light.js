@@ -1,11 +1,12 @@
 
 var MAX_LIGHT_COUNT = 5;
 
-
 class lightHandler {
-    constructor () {
+    constructor (_scene) {
         this.lightCount = 0;
         this.lightSources = [];
+
+        this.scene = _scene;
     }
 
     addSource (light) {
@@ -111,7 +112,7 @@ class light {
      *  @param { vec4 } diffuse: the diffuse value for the light.
      *  @param { vec4 } specular: the specular value for the light.
      */
-    constructor (_transform, _at, _ambient, _diffuse, _specular) {
+    constructor (_transform, _at, _ambient, _diffuse, _specular, _bias) {
         this.transform = _transform || new transform ();
 
         this.at = _at || vec3.fromValues (0.0, 0.0, 0.0);
@@ -125,6 +126,9 @@ class light {
 
         this.tag = "light"
         this.active = true;
+        this.shadows = true;
+
+        this.bias = _bias || 0.007;
 
         this.projectionMatrix = mat4.create ();
         this.view = mat4.create ();
@@ -151,13 +155,14 @@ class light {
 
         gl.uniformMatrix4fv (gl.getUniformLocation (program, "lightProjectionMatrix[" + this.lightID + "]"), false, this.projectionMatrix);
         gl.uniformMatrix4fv (gl.getUniformLocation (program, "lightMatrix[" + this.lightID + "]"), false, this.view);
+        gl.uniform1f  (gl.getUniformLocation (program, "fLightBias[" + this.lightID + "]"), this.bias);
     }
 
     /** setPerspective: sets the perspective projection matrix.
      */
     setPerspective () {
-        //mat4.ortho (this.projectionMatrix, -10.0, 10.0, -10.0, 10.0, 1.0, 256.0);
-        mat4.perspective (this.projectionMatrix, Math.PI * 70.0 / 180, OFFSCREEN_WIDTH / OFFSCREEN_HEIGHT, 1.0, 256.0);
+        //mat4.ortho (this.projectionMatrix, -10.0, 10.0, -10.0, 10.0, 1s.0, 256.0);
+        mat4.perspective (this.projectionMatrix, Math.PI * 90.0 / 180, OFFSCREEN_WIDTH / OFFSCREEN_HEIGHT, 1.0, 256.0);
     }
 
     /** setLightMatrix: sets the light view matrix.

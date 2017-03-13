@@ -1,6 +1,6 @@
 /** @file: test.js
  *  Main runtime code for ScottSimulator
- *  MIT license here
+ *  Licensed under the MIT license
  *
  **/
 
@@ -15,10 +15,15 @@ var shadowFramebuffers = [];
 var colorFramebuffer;
 
 var currentScene;
+var startMenuScene;
 var mainScene;
+var physicsDemoScene;
+var project1Scene;
+var survivalScene;
+var eggertRoomScene;
 
-var OFFSCREEN_WIDTH = 1024;
-var OFFSCREEN_HEIGHT = 1024;
+var OFFSCREEN_WIDTH = 2048;
+var OFFSCREEN_HEIGHT = 2048;
 
 // storage for global vertices and normals
 var pointsArray = [];
@@ -50,8 +55,6 @@ var rigidBodies = [];
 var clickEvents = [];
 var crosshair;
 
-var clickManager;
-
 var cubeVertices = [
 	vec4.fromValues ( -0.5, -0.5,  0.5, 1.0 ),
 	vec4.fromValues ( -0.5,  0.5,  0.5, 1.0 ),
@@ -77,12 +80,17 @@ var planeVertices = [
 	vec4.fromValues (10.0, 0.0, 10.0, 1.0)
 ];
 
+window.onload = function loading () {
+    setTimeout(init, 5000);
+}
+
 /** init: intialization function.
  */
-window.onload = function init () {
+function init () {
 
 	// Get the canvas variable and set it up
 	canvas = document.getElementById ("gl-canvas");
+
 	gl = WebGLUtils.setupWebGL (canvas, {antialias: true});
 	if (!gl) { alert ("WebGL isn't available"); }
 
@@ -109,9 +117,20 @@ window.onload = function init () {
 	lightMatrixLoc = gl.getUniformLocation (program, "lightMatrix");
 	lightProjectionMatrixLoc = gl.getUniformLocation (program, "lightProjectionMatrix");
 
-    clickManager = new clickHandler ();
+    startMenuScene = new sceneGraph (buildMenuSceneGraph);
 	mainScene = new sceneGraph (buildSceneGraph);
-    currentScene = mainScene
+    physicsDemoScene = new sceneGraph (buildPhysicsScene);
+    project1Scene = new sceneGraph (buildProject1Scene);
+    survivalScene = new sceneGraph (buildSurvivalScene);
+    eggertRoomScene = new sceneGraph (buildEggertRoomSceneGraph);
+    currentScene = startMenuScene;
+
+    startMenuScene.build ();
+    physicsDemoScene.build ();
+    project1Scene.build ();
+    survivalScene.build ();
+    eggertRoomScene.build ();
+	buildStateMachine ();
 
     crosshair = new Crosshair ([
             vec4.fromValues (0.0, 0.05, 0.5, 1.0),
@@ -119,10 +138,6 @@ window.onload = function init () {
             vec4.fromValues (0.05, 0.0, 0.5, 1.0),
             vec4.fromValues (-0.05, 0.0, 0.5, 1.0)
         ]);
-
-    mainScene.build ();
-
-	buildStateMachine ();
 
     // Setting up pointerlock
     canvas.requestPointerLock = canvas.requestPointerLock || canvas.mozRequestPointerLock;
@@ -150,7 +165,35 @@ window.onload = function init () {
     }
 
     canvas.addEventListener ("mousedown", function (e) {
-        clickManager.clicked = true;
+        var isRightMB;
+		    e = e || window.event;
+
+		    if ("which" in e)  // Gecko (Firefox), WebKit (Safari/Chrome) & Opera
+		        isRightMB = e.which == 3; 
+		    else if ("button" in e)  // IE, Opera 
+		        isRightMB = e.button == 2; 
+
+		    if (isRightMB) {
+		    	currentScene.clickManager.rightclicked = true;
+		    } else {
+		    	currentScene.clickManager.leftclicked = true;
+		    }
+    });
+
+    canvas.addEventListener ("mouseup", function (e) {
+        var isRightMB;
+            e = e || window.event;
+
+            if ("which" in e)  // Gecko (Firefox), WebKit (Safari/Chrome) & Opera
+                isRightMB = e.which == 3; 
+            else if ("button" in e)  // IE, Opera 
+                isRightMB = e.button == 2; 
+
+            if (isRightMB) {
+                currentScene.clickManager.rightreleased = true;
+            } else {
+                currentScene.clickManager.leftreleased = true;
+            }
     });
 
     // Assigning keys
@@ -240,6 +283,11 @@ window.onload = function init () {
 	prev = performance.now();
 	prev *= 0.001;
 
+	//Get rid of the loading screen
+	loader = document.getElementById("loader");
+	loader.style.display="none"; 
+
+
 	window.requestAnimationFrame (render);
 }
 
@@ -260,6 +308,9 @@ function render (current) {
 
 	// draw
 	currentScene.render (deltaTime);
+
+    // game checks - test conditions, etc. that are run every frame and are game specific.
+    gameChecks ();
 
 	// callback
 	window.requestAnimationFrame (render);

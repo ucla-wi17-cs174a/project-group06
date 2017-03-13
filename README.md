@@ -9,7 +9,7 @@ Team Members:
 
 This is our final project for CS-174a. 
 
-It can be demo'd here: https://mkuzdal.github.io/ScottSimulator/
+It can be demo'd here: https://ucla-wi17-cs174a.github.io/project-group06/
 
 The game concept is loosely based off of The Stanley Parable.
 
